@@ -1,0 +1,19 @@
+0 verbose cli /opt/homebrew/Cellar/node/23.9.0/bin/node /opt/homebrew/bin/npm
+1 info using npm@11.6.2
+2 info using node@v23.9.0
+3 silly config load:file:/opt/homebrew/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/siddarthalegala/Downloads/ai-hackathon/vscode-extension/.npmrc
+5 silly config load:file:/Users/siddarthalegala/.npmrc
+6 silly config load:file:/opt/homebrew/etc/npmrc
+7 verbose title npm install
+8 verbose argv "install" "--cache" "/Users/siddarthalegala/Downloads/ai-hackathon/.npm-cache"
+9 verbose logfile logs-max:10 dir:/Users/siddarthalegala/Downloads/ai-hackathon/.npm-cache/_logs/2025-11-17T16_16_29_127Z-
+10 verbose logfile /Users/siddarthalegala/Downloads/ai-hackathon/.npm-cache/_logs/2025-11-17T16_16_29_127Z-debug-0.log
+11 silly logfile done cleaning log files
+12 verbose cwd /Users/siddarthalegala/Downloads/ai-hackathon/vscode-extension
+13 verbose os Darwin 25.1.0
+14 verbose node v23.9.0
+15 verbose npm  v11.6.2
+16 verbose exit 1
+17 verbose code 1
+18 error A complete log of this run can be found in: /Users/siddarthalegala/Downloads/ai-hackathon/.npm-cache/_logs/2025-11-17T16_16_29_127Z-debug-0.log

@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# VS Code
+.vscode/
+
+# Test & coverage artifacts
+.coverage
+coverage/
+.pytest_cache/
+
+# Env files
+.env
+.env.*
+

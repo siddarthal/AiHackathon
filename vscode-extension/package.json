@@ -1,0 +1,100 @@
+{
+  "name": "codellama-vscode",
+  "displayName": "CodeLlama Copilot",
+  "description": "Chat + autocomplete VS Code integration for the local CodeLlama backend.",
+  "version": "0.0.1",
+  "publisher": "local-dev",
+  "engines": {
+    "vscode": "^1.83.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codellama.openChat",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:python",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "onLanguage:java",
+    "onLanguage:csharp",
+    "onLanguage:cpp",
+    "workspaceContains:**/*"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codellama.openChat",
+        "title": "CodeLlama: Open Chat"
+      },
+      {
+        "command": "codellama.triggerInlineCompletion",
+        "title": "CodeLlama: Trigger Inline Completion"
+      },
+      {
+        "command": "codellama.askAboutSelection",
+        "title": "Ask CodeLlama"
+      },
+      {
+        "command": "codellama.fixInChat",
+        "title": "Fix in Chat"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codellama.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "codellama"
+        },
+        {
+          "command": "codellama.fixInChat",
+          "group": "codellama"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "codellama.triggerInlineCompletion",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "CodeLlama",
+      "properties": {
+        "codellama.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "FastAPI backend base URL."
+        },
+        "codellama.maxFileChars": {
+          "type": "number",
+          "default": 8000,
+          "description": "Maximum characters from a file or selection to attach to chat."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.83.0",
+    "eslint": "^8.57.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "axios": "^1.7.7"
+  }
+}
+
