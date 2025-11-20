@@ -651,6 +651,9 @@ async def chat(req: ChatRequest):
     print(f"\n=== CHAT REQUEST DEBUG ===")
     print(f"API Mode: {mode} (model: {model_name})")
     print(f"Messages: {len(req.messages)}")
+    for i, msg in enumerate(req.messages):
+        preview = msg.content[:100] if len(msg.content) > 100 else msg.content
+        print(f"  Message {i} ({msg.role}): {preview}...")
     print(f"Files received: {len(req.files) if req.files else 0}")
     if req.files:
         for f in req.files:

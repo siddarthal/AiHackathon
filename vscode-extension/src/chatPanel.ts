@@ -18,7 +18,13 @@ interface PanelState {
 }
 
 const INITIAL_STATE: PanelState = {
-    messages: [],
+    messages: [
+        {
+            role: "assistant",
+            content: "👋 Welcome to **RashiAI**\n\nI'm your AI coding assistant. I can help you:\n• Write and explain code\n• Fix bugs and optimize\n• Create new files from code snippets\n• Answer technical questions\n\nJust ask me anything!",
+            timestamp: Date.now()
+        }
+    ],
     files: [],
     busy: false
 };
@@ -104,7 +110,7 @@ export class ChatPanel {
 
         const panel = vscode.window.createWebviewPanel(
             ChatPanel.viewType,
-            "CodeLlama Chat",
+            "RashiAI",
             column ?? vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -356,6 +362,105 @@ export class ChatPanel {
         return blocks;
     }
 
+    private async handleCreateFile(messageIndex: number, codeIndex: number): Promise<void> {
+        const message = this.state.messages[messageIndex];
+        if (!message || message.role !== "assistant") {
+            void vscode.window.showErrorMessage("Invalid message");
+            return;
+        }
+
+        const codeBlocks = this.extractCodeBlocks(message.content);
+        if (codeIndex >= codeBlocks.length) {
+            void vscode.window.showErrorMessage("Code block not found");
+            return;
+        }
+
+        const codeBlock = codeBlocks[codeIndex];
+        
+        // Determine file extension from language
+        const extMap: { [key: string]: string } = {
+            'java': 'java',
+            'python': 'py',
+            'javascript': 'js',
+            'typescript': 'ts',
+            'cpp': 'cpp',
+            'c': 'c',
+            'csharp': 'cs',
+            'go': 'go',
+            'rust': 'rs',
+            'php': 'php',
+            'ruby': 'rb',
+            'swift': 'swift',
+            'kotlin': 'kt'
+        };
+        
+        const ext = codeBlock.language ? (extMap[codeBlock.language.toLowerCase()] || 'txt') : 'txt';
+        
+        // Try to extract class/function name from code
+        let suggestedName = `NewFile.${ext}`;
+        
+        if (codeBlock.language === 'java') {
+            const classMatch = codeBlock.code.match(/(?:public\s+)?class\s+(\w+)/);
+            if (classMatch) {
+                suggestedName = `${classMatch[1]}.java`;
+            }
+        } else if (codeBlock.language === 'python') {
+            const classMatch = codeBlock.code.match(/class\s+(\w+)/);
+            if (classMatch) {
+                suggestedName = `${classMatch[1]}.py`;
+            }
+        }
+        
+        // Ask user for filename
+        const filename = await vscode.window.showInputBox({
+            prompt: "Enter filename",
+            value: suggestedName,
+            placeHolder: `example.${ext}`
+        });
+        
+        if (!filename) {
+            return;
+        }
+        
+        // Get workspace folder
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            void vscode.window.showErrorMessage("No workspace folder open");
+            return;
+        }
+        
+        // Create file
+        const filePath = vscode.Uri.joinPath(workspaceFolder.uri, filename);
+        
+        try {
+            // Check if file exists
+            try {
+                await vscode.workspace.fs.stat(filePath);
+                const overwrite = await vscode.window.showWarningMessage(
+                    `File ${filename} already exists. Overwrite?`,
+                    "Yes", "No"
+                );
+                if (overwrite !== "Yes") {
+                    return;
+                }
+            } catch {
+                // File doesn't exist, continue
+            }
+            
+            // Write file
+            const content = new TextEncoder().encode(codeBlock.code);
+            await vscode.workspace.fs.writeFile(filePath, content);
+            
+            // Open the file
+            const doc = await vscode.workspace.openTextDocument(filePath);
+            await vscode.window.showTextDocument(doc);
+            
+            void vscode.window.showInformationMessage(`Created ${filename}`);
+        } catch (error) {
+            void vscode.window.showErrorMessage(`Failed to create file: ${error}`);
+        }
+    }
+
     private async handleSendMessage(text: string): Promise<void> {
         const trimmed = text.trim();
         if (!trimmed) {
@@ -406,15 +511,9 @@ export class ChatPanel {
                 return;
             }
 
-            // Add metadata about which mode and model was used
-            let contentWithMeta = response.answer.trim();
-            if (response.api_mode_used && response.model_used) {
-                contentWithMeta += `\n\n_[${response.api_mode_used}: ${response.model_used}]_`;
-            }
-
             const assistantMessage: ConversationEntry = {
                 role: "assistant",
-                content: contentWithMeta,
+                content: response.answer.trim(),
                 timestamp: Date.now()
             };
 
@@ -482,7 +581,7 @@ export class ChatPanel {
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="${csp}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CodeLlama Chat</title>
+    <title>RashiAI</title>
     <style>
         :root {
             color-scheme: light dark;
@@ -501,18 +600,7 @@ export class ChatPanel {
             height: 100vh;
         }
         header {
-            padding: 16px;
-            border-bottom: 1px solid var(--vscode-panel-border);
-            background: linear-gradient(
-                135deg,
-                var(--vscode-editorWidget-background),
-                var(--vscode-sideBar-background)
-            );
-        }
-        header h1 {
-            margin: 0;
-            font-size: 1rem;
-            font-weight: 600;
+            display: none;
         }
         .messages {
             flex: 1;
@@ -529,10 +617,11 @@ export class ChatPanel {
             line-height: 1.6;
             background: var(--vscode-editorWidget-background);
             border: 1px solid var(--vscode-editorWidget-border);
+            color: #ffffff;
         }
         .message.user {
-            background: var(--vscode-input-background);
-            border-color: var(--vscode-input-border);
+            background: var(--vscode-editorWidget-background);
+            border-color: var(--vscode-editorWidget-border);
         }
         .message.assistant {
             background: var(--vscode-editorWidget-background);
@@ -541,10 +630,24 @@ export class ChatPanel {
         .message-label {
             font-size: 11px;
             font-weight: 600;
-            opacity: 0.7;
+            color: #ffffff;
+            opacity: 0.8;
             margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+        .pinned-message {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--vscode-editor-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            margin: -16px -16px 16px -16px;
+            padding: 12px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .pinned-message .message-label {
+            color: #4CAF50;
         }
         .attachments {
             padding: 8px 0;
@@ -582,10 +685,9 @@ export class ChatPanel {
             opacity: 0.8;
         }
         .message pre {
-            margin: 12px 0;
+            margin: 0;
             padding: 0;
             background: transparent;
-            border-radius: 8px;
             overflow: hidden;
         }
         .message code {
@@ -594,12 +696,12 @@ export class ChatPanel {
         }
         .message pre code {
             display: block;
-            padding: 12px;
-            background: var(--vscode-textCodeBlock-background);
-            border: 1px solid var(--vscode-panel-border);
-            border-radius: 6px;
+            padding: 16px;
+            background: var(--vscode-editor-background);
             overflow-x: auto;
-            line-height: 1.5;
+            line-height: 1.6;
+            border-radius: 4px;
+            color: #ffffff;
         }
         .message :not(pre) > code {
             padding: 2px 6px;
@@ -607,17 +709,45 @@ export class ChatPanel {
             border-radius: 3px;
             font-size: 0.9em;
         }
+        .code-block-wrapper {
+            margin: 12px 0;
+            border-radius: 4px;
+            overflow: hidden;
+            background: var(--vscode-editor-background);
+        }
         .code-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             padding: 6px 12px;
-            background: var(--vscode-editorWidget-background);
-            border: 1px solid var(--vscode-panel-border);
-            border-bottom: none;
-            border-radius: 6px 6px 0 0;
-            font-size: 0.85em;
+            background: #2196F3;
+            color: #ffffff;
+            font-size: 11px;
+            font-family: var(--vscode-editor-font-family);
+        }
+        .code-actions {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .create-file-button,
+        .apply-button {
+            padding: 3px 10px;
+            border: none;
+            border-radius: 3px;
+            background: transparent;
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
             opacity: 0.8;
+            transition: all 0.2s;
+            letter-spacing: 0.3px;
+        }
+        .create-file-button:hover,
+        .apply-button:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.2);
         }
         form {
             padding: 16px;
@@ -1004,30 +1134,44 @@ export class ChatPanel {
                 }
             }
             
+            // Find the last user message if busy
+            let lastUserMessageIndex = -1;
+            if (state.busy) {
+                for (let i = state.messages.length - 1; i >= 0; i--) {
+                    if (state.messages[i].role === 'user') {
+                        lastUserMessageIndex = i;
+                        break;
+                    }
+                }
+            }
+            
             messagesEl.innerHTML = state.messages.map((msg, index) => {
                 const date = new Date(msg.timestamp).toLocaleTimeString();
                 const attachmentsMarkup = renderMessageAttachments(msg.attachments);
                 const roleLabel = msg.role === 'user' ? 'You' : 'Assistant';
                 
-                // Format content with code blocks
-                const formattedContent = formatMessageContent(msg.content);
-                
-                // Only show "Apply to File" for assistant messages that contain code
-                let applyButton = '';
-                if (msg.role === 'assistant') {
-                    const hasCodeBlock = /\`\`\`/.test(msg.content);
-                    const looksLikeCode = /^[\\s]*(class |def |function |public |private |const |let |var |import |package )/m.test(msg.content);
-                    
-                    if (hasCodeBlock || looksLikeCode) {
-                        applyButton = \`<button class="apply-button" data-index="\${index}">✨ Apply to File</button>\`;
+                // Check if previous user message has attachments (for assistant messages)
+                let hasFileContext = false;
+                if (msg.role === 'assistant' && index > 0) {
+                    for (let i = index - 1; i >= 0; i--) {
+                        if (state.messages[i].role === 'user') {
+                            hasFileContext = !!(state.messages[i].attachments && state.messages[i].attachments.length > 0);
+                            break;
+                        }
                     }
                 }
                 
-                return \`<div class="message \${msg.role}">
+                // Format content with code blocks and action buttons
+                const formattedContent = formatMessageWithCodeActions(msg.content, index, msg.role, hasFileContext);
+                
+                // Pin the last user message while processing
+                const isPinned = state.busy && index === lastUserMessageIndex;
+                const pinnedClass = isPinned ? 'pinned-message' : '';
+                
+                return \`<div class="message \${msg.role} \${pinnedClass}">
                     <div class="message-label">\${roleLabel}</div>
                     <div>\${formattedContent}</div>
                     \${attachmentsMarkup}
-                    \${applyButton}
                 </div>\`;
             }).join('');
             
@@ -1036,6 +1180,15 @@ export class ChatPanel {
                 button.addEventListener('click', () => {
                     const index = parseInt(button.dataset.index || '0', 10);
                     vscode.postMessage({ type: 'applyToFile', messageIndex: index });
+                });
+            });
+            
+            // Attach click handlers to create file buttons
+            messagesEl.querySelectorAll('.create-file-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const msgIndex = parseInt(button.dataset.msgIndex || '0', 10);
+                    const codeIndex = parseInt(button.dataset.codeIndex || '0', 10);
+                    vscode.postMessage({ type: 'createFile', messageIndex: msgIndex, codeIndex: codeIndex });
                 });
             });
 
@@ -1084,6 +1237,80 @@ export class ChatPanel {
         
         function formatMessageContent(text) {
             return escapeHtml(text).replace(/\\n/g, '<br>');
+        }
+        
+        function formatMessageWithCodeActions(text, msgIndex, role, hasFileContext) {
+            const fence = String.fromCharCode(96, 96, 96);
+            const newline = String.fromCharCode(10);
+            const parts = [];
+            let currentIndex = 0;
+            let codeBlockIndex = 0;
+            
+            while (true) {
+                const startIdx = text.indexOf(fence, currentIndex);
+                if (startIdx === -1) {
+                    if (currentIndex < text.length) {
+                        parts.push({ type: 'text', content: text.substring(currentIndex) });
+                    }
+                    break;
+                }
+                
+                if (startIdx > currentIndex) {
+                    parts.push({ type: 'text', content: text.substring(currentIndex, startIdx) });
+                }
+                
+                const endIdx = text.indexOf(fence, startIdx + 3);
+                if (endIdx === -1) {
+                    parts.push({ type: 'text', content: text.substring(startIdx) });
+                    break;
+                }
+                
+                const codeContent = text.substring(startIdx + 3, endIdx);
+                const firstNewline = codeContent.indexOf(newline);
+                let language = '';
+                let code = codeContent;
+                
+                if (firstNewline > 0 && firstNewline < 20) {
+                    const firstLine = codeContent.substring(0, firstNewline).trim();
+                    if (firstLine && firstLine.length < 20) {
+                        language = firstLine;
+                        code = codeContent.substring(firstNewline + 1);
+                    }
+                }
+                
+                parts.push({ type: 'code', language: language, content: code, index: codeBlockIndex });
+                codeBlockIndex++;
+                currentIndex = endIdx + 3;
+            }
+            
+            let html = '';
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                if (part.type === 'text') {
+                    const escaped = escapeHtml(part.content);
+                    html += escaped.split(newline).join('<br>');
+                } else {
+                    const langLabel = part.language ? escapeHtml(part.language) : 'shell';
+                    html += '<div class="code-block-wrapper">';
+                    html += '<div class="code-header">';
+                    html += '<span>$ ' + langLabel + '</span>';
+                    if (role === 'assistant') {
+                        html += '<div class="code-actions">';
+                        // Show "create" only when no file is attached, "apply" only when file is attached
+                        if (!hasFileContext) {
+                            html += '<button class="create-file-button" data-msg-index="' + msgIndex + '" data-code-index="' + part.index + '" title="Create new file">create</button>';
+                        } else {
+                            html += '<button class="apply-button" data-index="' + msgIndex + '" title="Apply to existing file">apply</button>';
+                        }
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                    html += '<pre><code>' + escapeHtml(part.content) + '</code></pre>';
+                    html += '</div>';
+                }
+            }
+            
+            return html;
         }
     </script>
 </body>
