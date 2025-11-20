@@ -75,6 +75,9 @@ export class ChatPanel {
                     case "applyToFile":
                         await this.handleApplyToFile(message.messageIndex as number);
                         break;
+                    case "createFile":
+                        await this.handleCreateFile(message.messageIndex as number, message.codeIndex as number);
+                        break;
                     default:
                         break;
                 }
