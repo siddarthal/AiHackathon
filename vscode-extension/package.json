@@ -40,6 +40,14 @@
       {
         "command": "codellama.fixInChat",
         "title": "Fix in Chat"
+      },
+      {
+        "command": "codellama.switchApiMode",
+        "title": "CodeLlama: Switch API Mode (Local/Cloud)"
+      },
+      {
+        "command": "codellama.showConfig",
+        "title": "CodeLlama: Show Configuration"
       }
     ],
     "menus": {
@@ -75,6 +83,37 @@
           "type": "number",
           "default": 8000,
           "description": "Maximum characters from a file or selection to attach to chat."
+        },
+        "codellama.apiMode": {
+          "type": "string",
+          "enum": ["local", "gemini", "openai"],
+          "default": "local",
+          "description": "API mode: 'local' for Ollama, 'gemini' for Google Gemini, or 'openai' for OpenAI"
+        },
+        "codellama.localApiUrl": {
+          "type": "string",
+          "default": "http://localhost:11434/api/generate",
+          "description": "Local Ollama API URL"
+        },
+        "codellama.localModelName": {
+          "type": "string",
+          "default": "deepseek-coder:6.7b",
+          "description": "Local model name"
+        },
+        "codellama.tokenApiUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1/chat/completions",
+          "description": "Cloud API URL (OpenAI-compatible)"
+        },
+        "codellama.tokenApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for cloud service"
+        },
+        "codellama.tokenModelName": {
+          "type": "string",
+          "default": "gpt-3.5-turbo",
+          "description": "Cloud model name"
         }
       }
     }

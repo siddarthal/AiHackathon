@@ -25,4 +25,13 @@ coverage/
 # Env files
 .env
 .env.*
+app.properties
+
+# FAISS index (generated)
+faiss_index/
+
+# Documentation (generated/temporary)
+README.md
+README_*.md
+*_README.md
 

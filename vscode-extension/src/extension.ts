@@ -88,13 +88,63 @@ export function activate(context: vscode.ExtensionContext): void {
         ChatPanel.createOrShow(context, contextMessage, fileToAttach);
     });
 
+    // Switch API mode command
+    const switchApiModeCommand = vscode.commands.registerCommand("codellama.switchApiMode", async () => {
+        const config = vscode.workspace.getConfiguration("codellama");
+        const currentMode = config.get<string>("apiMode", "local");
+        
+        const newMode = await vscode.window.showQuickPick(
+            [
+                { label: "Local (Ollama)", value: "local", description: currentMode === "local" ? "✓ Current" : "" },
+                { label: "Cloud (Token-based)", value: "token", description: currentMode === "token" ? "✓ Current" : "" }
+            ],
+            { placeHolder: "Select API mode" }
+        );
+
+        if (newMode) {
+            await config.update("apiMode", newMode.value, vscode.ConfigurationTarget.Global);
+            void vscode.window.showInformationMessage(`API mode switched to: ${newMode.label}`);
+            
+            // Optionally restart backend or update settings
+            backend.updateConfig();
+        }
+    });
+
+    // Show configuration command
+    const showConfigCommand = vscode.commands.registerCommand("codellama.showConfig", async () => {
+        try {
+            const configInfo = await backend.getConfig();
+            const config = vscode.workspace.getConfiguration("codellama");
+            const vsCodeApiMode = config.get<string>("apiMode", "local");
+            
+            const message = `
+**VS Code Extension Config:**
+- API Mode: ${vsCodeApiMode}
+- Backend URL: ${config.get<string>("backendUrl")}
+
+**Backend Server Config:**
+- API Mode: ${configInfo.api_mode}
+- Model: ${configInfo.model}
+- API URL: ${configInfo.api_url}
+- Max Tokens: ${configInfo.max_tokens}
+- Temperature: ${configInfo.temperature}
+            `.trim();
+
+            void vscode.window.showInformationMessage(message, { modal: true });
+        } catch (error) {
+            void vscode.window.showErrorMessage(`Failed to fetch config: ${error}`);
+        }
+    });
+
     context.subscriptions.push(
         openChatCommand, 
         inlineProviderRegistration, 
         inlineProvider, 
         triggerInlineCommand,
         askAboutSelectionCommand,
-        fixInChatCommand
+        fixInChatCommand,
+        switchApiModeCommand,
+        showConfigCommand
     );
 }
 

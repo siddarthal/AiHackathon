@@ -1,0 +1,56 @@
+# Application Configuration
+# Copy this file to app.properties and configure your settings
+
+# ============================================================
+# IMPORTANT: Backend supports ALL 3 modes simultaneously!
+# ============================================================
+# Configure all settings below.
+# The VS Code extension user will choose which mode to use per request.
+# No need to restart backend when switching modes!
+
+# Default API Mode: "local", "gemini", or "openai"
+# (Used when client doesn't specify a mode)
+api.mode=local
+
+# ========================================
+# Local Model Configuration
+# ========================================
+# Configure this for local Ollama usage
+local.api.url=http://localhost:11434/api/generate
+local.model.name=deepseek-coder:6.7b
+
+# ========================================
+# Gemini API Configuration  
+# ========================================
+# Configure this for Google Gemini API (Fast & Cheap)
+gemini.api.url=https://generativelanguage.googleapis.com/v1beta/models
+gemini.api.key=YOUR_GEMINI_API_KEY_HERE
+gemini.model.name=gemini-2.5-flash
+
+# ========================================
+# OpenAI API Configuration  
+# ========================================
+# Configure this for OpenAI API
+openai.api.url=https://api.openai.com/v1/chat/completions
+openai.api.key=YOUR_OPENAI_API_KEY_HERE
+openai.model.name=gpt-3.5-turbo
+
+# ========================================
+# Document Indexing
+# ========================================
+index.path=faiss_index
+embedding.model=sentence-transformers/all-MiniLM-L6-v2
+retrieval.k=5
+
+# ========================================
+# Chat Settings
+# ========================================
+chat.max.tokens=512
+chat.temperature=0.3
+
+# ========================================
+# Autocompletion Settings
+# ========================================
+completion.max.tokens=128
+completion.temperature=0.0
+file.context.max.chars=4000

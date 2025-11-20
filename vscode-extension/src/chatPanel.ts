@@ -31,6 +31,7 @@ export class ChatPanel {
     private readonly backend: BackendClient;
     private disposables: vscode.Disposable[] = [];
     private state: PanelState = INITIAL_STATE;
+    private currentAbortController: AbortController | null = null;
 
     private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
         this.panel = panel;
@@ -45,6 +46,13 @@ export class ChatPanel {
                 switch (message.type) {
                     case "ready":
                         this.syncWebviewState();
+                        this.sendCurrentApiMode();
+                        break;
+                    case "getApiMode":
+                        this.sendCurrentApiMode();
+                        break;
+                    case "switchApiMode":
+                        await this.handleSwitchApiMode(message.mode as string);
                         break;
                     case "addActiveFile":
                         await this.handleAddActiveFile();
@@ -60,6 +68,9 @@ export class ChatPanel {
                         break;
                     case "sendMessage":
                         await this.handleSendMessage(message.text as string);
+                        break;
+                    case "stopGeneration":
+                        this.handleStopGeneration();
                         break;
                     case "applyToFile":
                         await this.handleApplyToFile(message.messageIndex as number);
@@ -196,6 +207,24 @@ export class ChatPanel {
             contextFile: undefined
         });
         void vscode.window.showInformationMessage("Chat context cleared");
+    }
+
+    private sendCurrentApiMode(): void {
+        const config = vscode.workspace.getConfiguration("codellama");
+        const apiMode = config.get<string>("apiMode", "local");
+        void this.panel.webview.postMessage({ type: "apiMode", mode: apiMode });
+    }
+
+    private async handleSwitchApiMode(newMode: string): Promise<void> {
+        const config = vscode.workspace.getConfiguration("codellama");
+        await config.update("apiMode", newMode, vscode.ConfigurationTarget.Global);
+        
+        // Update UI
+        this.sendCurrentApiMode();
+        
+        // Show notification
+        const modeLabel = newMode === "token" ? "Cloud (Token)" : "Local (Ollama)";
+        void vscode.window.showInformationMessage(`Switched to ${modeLabel} mode`);
     }
 
     private async handleApplyToFile(messageIndex: number): Promise<void> {
@@ -361,13 +390,28 @@ export class ChatPanel {
             contextFile: newContextFile
         });
 
+        // Create new abort controller for this request
+        this.currentAbortController = new AbortController();
+
         try {
             const payload = this.buildChatPayload(messages, filesForRequest);
-            const response = await this.backend.chat(payload);
+            const response = await this.backend.chat(payload, { signal: this.currentAbortController.signal });
+
+            // Check if request was aborted
+            if (this.currentAbortController?.signal.aborted) {
+                this.setState({ busy: false });
+                return;
+            }
+
+            // Add metadata about which mode and model was used
+            let contentWithMeta = response.answer.trim();
+            if (response.api_mode_used && response.model_used) {
+                contentWithMeta += `\n\n_[${response.api_mode_used}: ${response.model_used}]_`;
+            }
 
             const assistantMessage: ConversationEntry = {
                 role: "assistant",
-                content: response.answer.trim(),
+                content: contentWithMeta,
                 timestamp: Date.now()
             };
 
@@ -376,9 +420,28 @@ export class ChatPanel {
                 busy: false
             });
         } catch (error) {
+            // Ignore abort errors
+            if (error instanceof Error && error.name === 'AbortError') {
+                this.setState({ busy: false });
+                return;
+            }
+            
             const friendlyMessage = error instanceof Error ? error.message : String(error);
             void vscode.window.showErrorMessage(`Chat failed: ${friendlyMessage}`);
             this.setState({ busy: false, error: friendlyMessage, files: filesForRequest });
+        } finally {
+            this.currentAbortController = null;
+        }
+    }
+
+    private handleStopGeneration(): void {
+        // Abort the current request
+        if (this.currentAbortController) {
+            this.currentAbortController.abort();
+            this.setState({ 
+                busy: false
+            });
+            void vscode.window.showInformationMessage("Generation stopped");
         }
     }
 
@@ -442,26 +505,11 @@ export class ChatPanel {
                 var(--vscode-editorWidget-background),
                 var(--vscode-sideBar-background)
             );
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
         header h1 {
             margin: 0;
             font-size: 1rem;
             font-weight: 600;
-        }
-        .clear-button {
-            padding: 4px 10px;
-            border-radius: 4px;
-            border: 1px solid var(--vscode-button-border, transparent);
-            background: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
-            cursor: pointer;
-            font-size: 12px;
-        }
-        .clear-button:hover {
-            background: var(--vscode-button-secondaryHoverBackground);
         }
         .messages {
             flex: 1;
@@ -472,20 +520,28 @@ export class ChatPanel {
             gap: 12px;
         }
         .message {
-            padding: 12px;
+            padding: 12px 16px;
             border-radius: 12px;
-            max-width: 80%;
-            line-height: 1.4;
-        }
-        .message.user {
-            align-self: flex-end;
-            background: var(--vscode-editor-selectionBackground);
-            color: var(--vscode-editor-selectionForeground, var(--vscode-foreground));
-        }
-        .message.assistant {
-            align-self: flex-start;
+            max-width: 100%;
+            line-height: 1.6;
             background: var(--vscode-editorWidget-background);
             border: 1px solid var(--vscode-editorWidget-border);
+        }
+        .message.user {
+            background: var(--vscode-input-background);
+            border-color: var(--vscode-input-border);
+        }
+        .message.assistant {
+            background: var(--vscode-editorWidget-background);
+            border-color: var(--vscode-editorWidget-border);
+        }
+        .message-label {
+            font-size: 11px;
+            font-weight: 600;
+            opacity: 0.7;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .attachments {
             padding: 8px 0;
@@ -529,36 +585,159 @@ export class ChatPanel {
             gap: 8px;
         }
         .input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            padding: 12px;
+            background: var(--vscode-editorWidget-background);
+            border-radius: 12px;
+            border: 1px solid var(--vscode-editorWidget-border);
+        }
+        .input-area-container {
+            flex: 1;
             position: relative;
         }
         textarea {
             width: 100%;
-            min-height: 90px;
-            resize: vertical;
-            padding: 12px 80px 12px 12px;
+            min-height: 50px;
+            max-height: 200px;
+            resize: none;
+            padding: 12px 12px 40px 12px;
             border-radius: 8px;
-            border: 1px solid var(--vscode-editorWidget-border);
-            background: var(--vscode-input-background);
+            border: none;
+            background: transparent;
             color: var(--vscode-input-foreground);
+            font-family: var(--vscode-font-family);
+            font-size: 14px;
         }
-        .input-buttons {
+        textarea:focus {
+            outline: none;
+        }
+        .input-footer {
             position: absolute;
             bottom: 8px;
-            right: 12px;
+            left: 8px;
+            right: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .input-buttons {
             display: flex;
             gap: 6px;
+            align-items: center;
         }
         .icon-button {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
             border: 1px solid var(--vscode-editorWidget-border);
-            background: var(--vscode-editorWidget-background);
+            background: transparent;
             color: var(--vscode-foreground);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 14px;
+            opacity: 0.7;
+        }
+        .icon-button:hover {
+            opacity: 1;
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+        .agent-selector {
+            position: relative;
+            display: inline-block;
+        }
+        .agent-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 12px;
+            background: var(--vscode-button-secondaryBackground);
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid var(--vscode-button-border, transparent);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        .agent-button:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+        .agent-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--vscode-charts-green);
+        }
+        .agent-dot.gemini {
+            background: var(--vscode-charts-purple);
+        }
+        .agent-dot.openai {
+            background: var(--vscode-charts-blue);
+        }
+        .agent-dropdown {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 4px;
+            background: var(--vscode-dropdown-background);
+            border: 1px solid var(--vscode-dropdown-border);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            min-width: 140px;
+            display: none;
+            z-index: 1000;
+        }
+        .agent-dropdown.show {
+            display: block;
+        }
+        .agent-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .agent-option:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        .agent-option:first-child {
+            border-radius: 8px 8px 0 0;
+        }
+        .agent-option:last-child {
+            border-radius: 0 0 8px 8px;
+        }
+        .agent-option.selected {
+            background: var(--vscode-list-activeSelectionBackground);
+            color: var(--vscode-list-activeSelectionForeground);
+        }
+        .send-button {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .send-button:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+        .send-button.processing {
+            background: var(--vscode-errorForeground);
+        }
+        .send-button.processing:hover {
+            background: var(--vscode-errorForeground);
+            opacity: 0.9;
         }
         .actions {
             display: flex;
@@ -573,13 +752,9 @@ export class ChatPanel {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
         }
-        .status {
-            padding: 8px 16px;
-            color: var(--vscode-descriptionForeground);
-        }
+        .status,
         .error {
-            color: var(--vscode-errorForeground);
-            padding: 0 16px 12px 16px;
+            display: none !important;
         }
         .apply-button {
             margin-top: 8px;
@@ -599,23 +774,43 @@ export class ChatPanel {
 <body>
     <div class="container">
         <header>
-            <h1>CodeLlama Copilot</h1>
-            <button id="clearBtn" class="clear-button" title="Clear chat and context">🗑️ Clear</button>
+            <h1>Raasi</h1>
         </header>
-        <div class="status" id="status"></div>
         <div class="messages" id="messages"></div>
-        <div class="error" id="error"></div>
         <form id="chat-form">
             <div class="attachments" id="attachments"></div>
             <div class="input-wrapper">
-                <textarea id="chat-input" placeholder="Ask CodeLlama anything..."></textarea>
-                <div class="input-buttons">
-                    <button type="button" id="attach-file-picker" class="icon-button" title="Attach files">📎</button>
-                    <button type="button" id="attach-button" class="icon-button" title="Attach active file">🗒</button>
+                <div class="input-area-container">
+                    <textarea id="chat-input" placeholder="Ask anything..."></textarea>
+                    <div class="input-footer">
+                        <div class="input-buttons">
+                            <button type="button" id="attach-file-picker" class="icon-button" title="Attach files">📎</button>
+                            <button type="button" id="attach-button" class="icon-button" title="Attach active file">🗒</button>
+                        </div>
+                        <div class="agent-selector">
+                            <div class="agent-button" id="agentButton">
+                                <span class="agent-dot" id="agentDot"></span>
+                                <span id="agentText">Local</span>
+                                <span>▼</span>
+                            </div>
+                            <div class="agent-dropdown" id="agentDropdown">
+                                <div class="agent-option" data-mode="local">
+                                    <span class="agent-dot"></span>
+                                    <span>Local</span>
+                                </div>
+                                <div class="agent-option" data-mode="gemini">
+                                    <span class="agent-dot gemini"></span>
+                                    <span>Gemini</span>
+                                </div>
+                                <div class="agent-option" data-mode="openai">
+                                    <span class="agent-dot openai"></span>
+                                    <span>OpenAI</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="actions">
-                <button id="send-button" type="submit">Send</button>
+                <button id="send-button" class="send-button" type="submit" title="Send message">↑</button>
             </div>
         </form>
     </div>
@@ -627,23 +822,55 @@ export class ChatPanel {
         const attachmentsEl = document.getElementById('attachments');
         const formEl = document.getElementById('chat-form');
         const inputEl = document.getElementById('chat-input');
-        const errorEl = document.getElementById('error');
-        const statusEl = document.getElementById('status');
         const attachBtn = document.getElementById('attach-button');
         const attachPickerBtn = document.getElementById('attach-file-picker');
 
         vscode.postMessage({ type: 'ready' });
 
         window.addEventListener('message', event => {
-            const { type, payload, text } = event.data;
+            const { type, payload, text, mode } = event.data;
             if (type === 'state') {
                 state = payload;
                 render();
             } else if (type === 'setInput') {
                 inputEl.value = text || '';
                 inputEl.focus();
+            } else if (type === 'apiMode') {
+                updateAgentUI(mode);
             }
         });
+        
+        function updateAgentUI(mode) {
+            const agentDot = document.getElementById('agentDot');
+            const agentText = document.getElementById('agentText');
+            const agentDropdown = document.getElementById('agentDropdown');
+            
+            if (agentDot && agentText) {
+                // Update button
+                agentDot.className = 'agent-dot';
+                if (mode === 'gemini') {
+                    agentDot.classList.add('gemini');
+                    agentText.textContent = 'Gemini';
+                } else if (mode === 'openai') {
+                    agentDot.classList.add('openai');
+                    agentText.textContent = 'OpenAI';
+                } else {
+                    agentText.textContent = 'Local';
+                }
+            }
+            
+            // Update dropdown selected state
+            if (agentDropdown) {
+                const options = agentDropdown.querySelectorAll('.agent-option');
+                options.forEach(option => {
+                    if (option.getAttribute('data-mode') === mode) {
+                        option.classList.add('selected');
+                    } else {
+                        option.classList.remove('selected');
+                    }
+                });
+            }
+        }
 
         attachBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'addActiveFile' });
@@ -651,24 +878,84 @@ export class ChatPanel {
         attachPickerBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'addFilesFromPicker' });
         });
+
+        // Get initial mode
+        vscode.postMessage({ type: 'getApiMode' });
+
+        // Agent selector dropdown
+        const agentButton = document.getElementById('agentButton');
+        const agentDropdown = document.getElementById('agentDropdown');
         
-        const clearBtn = document.getElementById('clearBtn');
-        clearBtn.addEventListener('click', () => {
-            if (confirm('Clear all messages and context?')) {
-                vscode.postMessage({ type: 'clearContext' });
-            }
-        });
+        if (agentButton && agentDropdown) {
+            // Toggle dropdown
+            agentButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                agentDropdown.classList.toggle('show');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', () => {
+                agentDropdown.classList.remove('show');
+            });
+            
+            // Handle option selection
+            const agentOptions = agentDropdown.querySelectorAll('.agent-option');
+            agentOptions.forEach(option => {
+                option.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const mode = option.getAttribute('data-mode');
+                    vscode.postMessage({ type: 'switchApiMode', mode: mode });
+                    agentDropdown.classList.remove('show');
+                });
+            });
+        }
 
         formEl.addEventListener('submit', event => {
             event.preventDefault();
-            vscode.postMessage({ type: 'sendMessage', text: inputEl.value });
-            inputEl.value = '';
+            if (!state.busy) {
+                vscode.postMessage({ type: 'sendMessage', text: inputEl.value });
+                inputEl.value = '';
+            }
         });
 
+        // Send button click handler
+        const sendBtn = document.getElementById('send-button');
+        if (sendBtn) {
+            sendBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                if (state.busy) {
+                    // Stop/pause generation
+                    vscode.postMessage({ type: 'stopGeneration' });
+                } else {
+                    // Send message
+                    const text = inputEl.value.trim();
+                    if (text) {
+                        vscode.postMessage({ type: 'sendMessage', text });
+                        inputEl.value = '';
+                    }
+                }
+            });
+        }
+
         function render() {
+            // Update send button based on busy state
+            const sendBtn = document.getElementById('send-button');
+            if (sendBtn) {
+                if (state.busy) {
+                    sendBtn.classList.add('processing');
+                    sendBtn.innerHTML = '⏸';
+                    sendBtn.title = 'Stop generating';
+                } else {
+                    sendBtn.classList.remove('processing');
+                    sendBtn.innerHTML = '↑';
+                    sendBtn.title = 'Send message';
+                }
+            }
+            
             messagesEl.innerHTML = state.messages.map((msg, index) => {
                 const date = new Date(msg.timestamp).toLocaleTimeString();
                 const attachmentsMarkup = renderMessageAttachments(msg.attachments);
+                const roleLabel = msg.role === 'user' ? 'You' : 'Assistant';
                 
                 // Only show "Apply to File" for assistant messages that contain code
                 let applyButton = '';
@@ -682,7 +969,7 @@ export class ChatPanel {
                 }
                 
                 return \`<div class="message \${msg.role}">
-                    <div class="meta">\${msg.role === 'user' ? 'You' : 'CodeLlama'} · \${date}</div>
+                    <div class="message-label">\${roleLabel}</div>
                     <div>\${escapeHtml(msg.content).replace(/\\n/g, '<br>')}</div>
                     \${attachmentsMarkup}
                     \${applyButton}
@@ -714,8 +1001,7 @@ export class ChatPanel {
                 attachmentsEl.innerHTML = '';
             }
 
-            errorEl.textContent = state.error ?? '';
-            statusEl.textContent = state.busy ? 'Thinking…' : '';
+            // Status and error are handled by VS Code notifications
             inputEl.disabled = state.busy;
         }
 
