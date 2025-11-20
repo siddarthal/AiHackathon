@@ -578,6 +578,44 @@ export class ChatPanel {
             font-size: 0.85em;
             opacity: 0.8;
         }
+        .message pre {
+            margin: 12px 0;
+            padding: 0;
+            background: transparent;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .message code {
+            font-family: var(--vscode-editor-font-family);
+            font-size: 13px;
+        }
+        .message pre code {
+            display: block;
+            padding: 12px;
+            background: var(--vscode-textCodeBlock-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
+        .message :not(pre) > code {
+            padding: 2px 6px;
+            background: var(--vscode-textCodeBlock-background);
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 12px;
+            background: var(--vscode-editorWidget-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
         form {
             padding: 16px;
             display: flex;
@@ -918,6 +956,17 @@ export class ChatPanel {
             }
         });
 
+        // Handle Enter key for submission (Shift+Enter for new line)
+        inputEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (!state.busy && inputEl.value.trim()) {
+                    vscode.postMessage({ type: 'sendMessage', text: inputEl.value });
+                    inputEl.value = '';
+                }
+            }
+        });
+
         // Send button click handler
         const sendBtn = document.getElementById('send-button');
         if (sendBtn) {
@@ -957,6 +1006,9 @@ export class ChatPanel {
                 const attachmentsMarkup = renderMessageAttachments(msg.attachments);
                 const roleLabel = msg.role === 'user' ? 'You' : 'Assistant';
                 
+                // Format content with code blocks
+                const formattedContent = formatMessageContent(msg.content);
+                
                 // Only show "Apply to File" for assistant messages that contain code
                 let applyButton = '';
                 if (msg.role === 'assistant') {
@@ -970,7 +1022,7 @@ export class ChatPanel {
                 
                 return \`<div class="message \${msg.role}">
                     <div class="message-label">\${roleLabel}</div>
-                    <div>\${escapeHtml(msg.content).replace(/\\n/g, '<br>')}</div>
+                    <div>\${formattedContent}</div>
                     \${attachmentsMarkup}
                     \${applyButton}
                 </div>\`;
@@ -1003,6 +1055,11 @@ export class ChatPanel {
 
             // Status and error are handled by VS Code notifications
             inputEl.disabled = state.busy;
+            
+            // Auto-scroll to bottom to show latest message
+            if (messagesEl) {
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
         }
 
         function renderMessageAttachments(files) {
@@ -1020,6 +1077,10 @@ export class ChatPanel {
             const div = document.createElement('div');
             div.innerText = text;
             return div.innerHTML;
+        }
+        
+        function formatMessageContent(text) {
+            return escapeHtml(text).replace(/\\n/g, '<br>');
         }
     </script>
 </body>
