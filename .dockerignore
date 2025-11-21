@@ -1,0 +1,54 @@
+# OS / Editor junk
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+
+# Node / npm caches
+.npm-cache/
+
+# Jupyter
+*.ipynb_checkpoints/
+
+# Docker internal
+.dockerignore
+
+# Extensions / build artifacts
+vscode-extension/
+
+# Data files or indices that shouldn’t go inside image
+faiss_index/
+
+# Documentation (optional — remove if needed inside the image)
+*.md
+
+# Tests (optional — include only if needed inside container)
+test_backend.py
+test_scenarios.md
+TEST_REPORT.md
+IMPLEMENTATION_STATUS.md
+FINAL_IMPLEMENTATION.md
+CHANGES_SUMMARY.md
+QUICK_START.md
+QUICK_REFERENCE.md
+README_UPDATED.md
+SETUP_GUIDE.md
+DEPLOYMENT.md
+UI_SWITCH_BUTTON.md
+DYNAMIC_MODE_SWITCHING.md
+
+# Hidden folders
+.*

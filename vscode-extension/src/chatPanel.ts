@@ -21,7 +21,7 @@ const INITIAL_STATE: PanelState = {
     messages: [
         {
             role: "assistant",
-            content: "👋 Welcome to **RashiAI**\n\nI'm your AI coding assistant. I can help you:\n• Write and explain code\n• Fix bugs and optimize\n• Create new files from code snippets\n• Answer technical questions\n\nJust ask me anything!",
+            content: "👋 Welcome to **Raasi**\n\nI'm your AI coding assistant. I can help you:\n• Write and explain code\n• Fix bugs and optimize\n• Create new files from code snippets\n• Answer technical questions\n\nJust ask me anything!",
             timestamp: Date.now()
         }
     ],
@@ -110,7 +110,7 @@ export class ChatPanel {
 
         const panel = vscode.window.createWebviewPanel(
             ChatPanel.viewType,
-            "RashiAI",
+            "Raasi",
             column ?? vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -228,12 +228,26 @@ export class ChatPanel {
         const config = vscode.workspace.getConfiguration("codellama");
         await config.update("apiMode", newMode, vscode.ConfigurationTarget.Global);
         
+        // Clear conversation context when switching models to prevent confusion
+        this.setState({
+            messages: [],
+            files: [],
+            busy: false,
+            error: undefined,
+            contextFile: undefined
+        });
+        
         // Update UI
         this.sendCurrentApiMode();
         
         // Show notification
-        const modeLabel = newMode === "token" ? "Cloud (Token)" : "Local (Ollama)";
-        void vscode.window.showInformationMessage(`Switched to ${modeLabel} mode`);
+        let modeLabel = "Local";
+        if (newMode === "gemini") {
+            modeLabel = "Gemini";
+        } else if (newMode === "openai") {
+            modeLabel = "OpenAI";
+        }
+        void vscode.window.showInformationMessage(`Switched to ${modeLabel} - Chat cleared for fresh start`);
     }
 
     private async handleApplyToFile(messageIndex: number): Promise<void> {
@@ -468,6 +482,9 @@ export class ChatPanel {
             return;
         }
 
+        console.log(`[ChatPanel] handleSendMessage called with: "${trimmed}"`);
+        console.log(`[ChatPanel] Current messages count: ${this.state.messages.length}`);
+
         const autoLinkedFiles = await attachFilesMentionedInPrompt(trimmed, this.state.files);
         let filesForRequest: AttachedFile[] = this.state.files;
         if (autoLinkedFiles.length) {
@@ -486,6 +503,7 @@ export class ChatPanel {
         };
 
         const messages = [...this.state.messages, userMessage];
+        console.log(`[ChatPanel] New messages array length: ${messages.length}`);
         
         // Update context file if we're attaching files
         const newContextFile = filesForRequest.length > 0 ? filesForRequest[0] : this.state.contextFile;
@@ -581,7 +599,7 @@ export class ChatPanel {
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="${csp}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RashiAI</title>
+    <title>Raasi</title>
     <style>
         :root {
             color-scheme: light dark;
@@ -720,10 +738,11 @@ export class ChatPanel {
             justify-content: space-between;
             align-items: center;
             padding: 6px 12px;
-            background: #2196F3;
+            background: #1e1e1e;
             color: #ffffff;
             font-size: 11px;
             font-family: var(--vscode-editor-font-family);
+            border-bottom: 1px solid #3e3e3e;
         }
         .code-actions {
             display: flex;

@@ -1,9 +1,9 @@
 {
-  "name": "codellama-vscode",
-  "displayName": "CodeLlama Copilot",
-  "description": "Chat + autocomplete VS Code integration for the local CodeLlama backend.",
-  "version": "0.0.1",
-  "publisher": "local-dev",
+  "name": "raasi-ai",
+  "displayName": "Raasi AI",
+  "description": "AI-powered coding assistant with chat, autocomplete, and multi-model support (Local/Gemini/OpenAI).",
+  "version": "1.0.0",
+  "publisher": "raasi",
   "engines": {
     "vscode": "^1.83.0"
   },
@@ -27,15 +27,15 @@
     "commands": [
       {
         "command": "codellama.openChat",
-        "title": "CodeLlama: Open Chat"
+        "title": "Raasi: Open Chat"
       },
       {
         "command": "codellama.triggerInlineCompletion",
-        "title": "CodeLlama: Trigger Inline Completion"
+        "title": "Raasi: Trigger Inline Completion"
       },
       {
         "command": "codellama.askAboutSelection",
-        "title": "Ask CodeLlama"
+        "title": "Ask Raasi"
       },
       {
         "command": "codellama.fixInChat",
@@ -43,11 +43,11 @@
       },
       {
         "command": "codellama.switchApiMode",
-        "title": "CodeLlama: Switch API Mode (Local/Cloud)"
+        "title": "Raasi: Switch API Mode (Local/Gemini/OpenAI)"
       },
       {
         "command": "codellama.showConfig",
-        "title": "CodeLlama: Show Configuration"
+        "title": "Raasi: Show Configuration"
       }
     ],
     "menus": {
@@ -72,7 +72,7 @@
       }
     ],
     "configuration": {
-      "title": "CodeLlama",
+      "title": "Raasi AI",
       "properties": {
         "codellama.backendUrl": {
           "type": "string",
@@ -86,7 +86,11 @@
         },
         "codellama.apiMode": {
           "type": "string",
-          "enum": ["local", "gemini", "openai"],
+          "enum": [
+            "local",
+            "gemini",
+            "openai"
+          ],
           "default": "local",
           "description": "API mode: 'local' for Ollama, 'gemini' for Google Gemini, or 'openai' for OpenAI"
         },
@@ -127,13 +131,13 @@
   "devDependencies": {
     "@types/node": "^18.19.0",
     "@types/vscode": "^1.83.0",
-    "eslint": "^8.57.1",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
+    "@vscode/vsce": "^3.7.0",
+    "eslint": "^8.57.1",
     "typescript": "^5.4.5"
   },
   "dependencies": {
     "axios": "^1.7.7"
   }
 }
-
