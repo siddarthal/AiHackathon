@@ -5,3 +5,6 @@ redis
 requests
 sentence-transformers
 numpy
+langchain==0.0.352
+faiss-cpu
+python-dotenv
